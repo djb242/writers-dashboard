@@ -451,15 +451,15 @@ function NewProjectDialog({ onCreate }){
   const [open, setOpen] = useState(false);
   const [title,setTitle] = useState("");
   const [description,setDescription] = useState("");
-  const [targetWords,setTargetWords] = useState(5000);
+  const [targetWordsText,setTargetWordsText] = useState("5000");
   const [deadline,setDeadline] = useState("");
 
-  function reset(){ setTitle(""); setDescription(""); setTargetWords(5000); setDeadline(""); }
+  function reset(){ setTitle(""); setDescription(""); setTargetWordsText("5000"); setDeadline(""); }
 
   function create(){
     if(!title.trim()) return toast("Title is required");
-    onCreate({ title, description, targetWords, deadline });
-    reset(); setOpen(false);
+    const n = parseInt(targetWordsText, 10);
+    onCreate({ title, description, targetWords: isNaN(n) ? 0 : n, deadline });
   }
 
   return (
@@ -478,7 +478,7 @@ function NewProjectDialog({ onCreate }){
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-zinc-600">Target words</label>
-              <Input type="number" value={targetWords} onChange={(e)=>setTargetWords(parseInt(e.target.value||"0"))} />
+              <Input type="number" value={targetWordsText} onChange={(e)=>setTargetWordsText(e.target.value)} />
             </div>
             <div>
               <label className="text-xs text-zinc-600">Deadline (optional)</label>
@@ -545,15 +545,15 @@ function ProjectCard({ p, onUpdate, onDelete, totalWords }){
 
 function InlineEdit({ target, label, onChange }){
   const [editing, setEditing] = useState(false);
-  const [val, setVal] = useState(target);
-  useEffect(()=>setVal(target),[target]);
+  const [val, setVal] = useState(String(target));
+  useEffect(()=>setVal(String(target)),[target]);
   return (
     <div className="text-xs text-zinc-600 flex items-center gap-2">
       <span>{label}:</span>
       {editing ? (
         <div className="flex items-center gap-2">
-          <Input className="h-7 w-24" type="number" value={val} onChange={(e)=>setVal(parseInt(e.target.value||"0"))}/>
-          <Button size="sm" onClick={()=>{ onChange(val); setEditing(false); }}>Save</Button>
+          <Input className="h-7 w-24" type="number" value={val} onChange={(e)=>setVal(e.target.value)} />
+          <Button size="sm" onClick={()=>{ onChange(parseInt(val || "0", 10) || 0); setEditing(false); }}>Save</Button>
         </div>
       ):(
         <button className="inline-flex items-center gap-1 hover:underline" onClick={()=>setEditing(true)}>
@@ -604,17 +604,19 @@ function LogSessionDialog({ trigger, onSave, defaultProjectId="", defaultMinutes
   const [open, setOpen] = useState(false);
   const [projectId,setProjectId] = useState(defaultProjectId);
   const [date,setDate] = useState(new Date().toISOString().slice(0,10));
-  const [minutes,setMinutes] = useState(defaultMinutes);
-  const [words,setWords] = useState(0);
+  const [minutesText,setMinutesText] = useState(String(defaultMinutes));
+  const [wordsText,setWordsText] = useState("");
   const [notes,setNotes] = useState("");
 
   useEffect(()=>{ setProjectId(defaultProjectId); },[defaultProjectId]);
   useEffect(()=>{ if(openExternally) setOpen(true); },[openExternally]);
 
   function save(){
+    const minutes = parseInt(minutesText, 10) || 0;
+    const words = parseInt(wordsText, 10) || 0;
     if(minutes<=0 && words<=0){ toast("Add minutes or words"); return; }
     onSave({ projectId: projectId || undefined, date, minutes, words, notes });
-    setOpen(false); setMinutes(defaultMinutes); setWords(0); setNotes(""); setDate(new Date().toISOString().slice(0,10)); setProjectId(defaultProjectId);
+    setOpen(false); setMinutesText(String(defaultMinutes)); setWordsText(""); setNotes(""); setDate(new Date().toISOString().slice(0,10)); setProjectId(defaultProjectId);
     if(onCloseExternal) onCloseExternal();
   }
 
@@ -633,13 +635,13 @@ function LogSessionDialog({ trigger, onSave, defaultProjectId="", defaultMinutes
             </div>
             <div>
               <label className="text-xs text-zinc-600">Minutes</label>
-              <Input type="number" value={minutes} onChange={(e)=>setMinutes(parseInt(e.target.value||"0"))} />
+              <Input type="number" value={minutesText} onChange={(e)=>setMinutesText(e.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-zinc-600">Words</label>
-              <Input type="number" value={words} onChange={(e)=>setWords(parseInt(e.target.value||"0"))} />
+              <Input type="number" value={wordsText} onChange={(e)=>setWordsText(e.target.value)} />
             </div>
             <div>
               <label className="text-xs text-zinc-600">Project (optional)</label>
