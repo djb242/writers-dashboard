@@ -22,7 +22,7 @@ import { supabase } from "./lib/supabase";
 // ------------------------------
 function uid() { return Math.random().toString(36).slice(2); }
 
-/** @typedef {{ id: string, title: string, description?: string, targetWords: number, deadline?: string, status: 'Drafting'|'Editing'|'Complete', createdAt: string, archived?: boolean }} Project */
+/** @typedef {{ id: string, title: string, description?: string, targetWords: number, deadline?: string, status: 'Drafting'|'Editing'|'Complete', createdAt: string, archived?: boolean, draft?: string }} Project */
 /** @typedef {{ id: string, projectId?: string, date: string, minutes: number, words: number, notes?: string }} Session */
 /** @typedef {{ id: string, text: string, tags: string[], projectId?: string, createdAt: string, pinned?: boolean }} Idea */
 
@@ -194,8 +194,9 @@ export default function WritersDashboard({ userId }) {
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(25*60);
   const [customMins, setCustomMins] = useState(25);
-  const startSecondsRef = useRef(25*60); 
+  const startSecondsRef = useRef(25*60);
   const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [draftProjectId, setDraftProjectId] = useState("");
   const [autoOpenLog, setAutoOpenLog] = useState(false);
   const intervalRef = useRef(null);
   const [customMinsText, setCustomMinsText] = useState(String(customMins));
@@ -274,7 +275,7 @@ export default function WritersDashboard({ userId }) {
                 <div className="text-5xl font-mono tabular-nums">{minutes}:{seconds}</div>
                 <div className="flex gap-2">
                   {!timerRunning ? (
-                    <Button onClick={()=>setTimerRunning(true)}><Play className="w-4 h-4 mr-2"/>Start</Button>
+                    <Button onClick={()=>{ setTimerRunning(true); if(selectedProjectId) setDraftProjectId(selectedProjectId); }}><Play className="w-4 h-4 mr-2"/>Start</Button>
                   ) : (
                     <Button variant="secondary" onClick={()=>setTimerRunning(false)}><Pause className="w-4 h-4 mr-2"/>Pause</Button>
                   )}
@@ -332,6 +333,11 @@ export default function WritersDashboard({ userId }) {
                 onSave={(payload)=> logSession(payload)}
                 openExternally={autoOpenLog && timerSeconds===0}
                 onCloseExternal={()=> setAutoOpenLog(false)}
+              />
+              <ProjectDraftDialog
+                project={projects.find(p=>p.id===draftProjectId)}
+                onSave={(text)=>updateProject(draftProjectId, { draft: text })}
+                onClose={()=>setDraftProjectId("")}
               />
             </CardContent>
           </Card>
@@ -460,6 +466,7 @@ function NewProjectDialog({ onCreate }){
     if(!title.trim()) return toast("Title is required");
     const n = parseInt(targetWordsText, 10);
     onCreate({ title, description, targetWords: isNaN(n) ? 0 : n, deadline });
+    reset(); setOpen(false);
   }
 
   return (
@@ -594,6 +601,27 @@ function EditProjectDialog({ p, onUpdate, onDelete }){
             <Button variant="secondary" onClick={()=>setOpen(false)}>Cancel</Button>
             <Button onClick={save}>Save</Button>
           </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ProjectDraftDialog({ project, onSave, onClose }){
+  const [text, setText] = useState(project?.draft || "");
+  useEffect(() => { setText(project?.draft || ""); }, [project]);
+  if (!project) return null;
+  function save() { onSave(text); onClose(); }
+  return (
+    <Dialog open={true} onOpenChange={(v)=>{ if(!v) onClose(); }}>
+      <DialogContent className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-xl">
+        <DialogHeader>
+          <DialogTitle>Draft: {project.title}</DialogTitle>
+        </DialogHeader>
+        <Textarea value={text} onChange={(e)=>setText(e.target.value)} className="min-h-[60vh]" />
+        <DialogFooter className="justify-between">
+          <Button variant="secondary" onClick={onClose}>Close</Button>
+          <Button onClick={save}>Save</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
