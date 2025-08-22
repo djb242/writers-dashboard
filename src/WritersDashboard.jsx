@@ -395,6 +395,7 @@ export default function WritersDashboard({ userId }) {
                     onUpdate={(patch)=>updateProject(p.id, patch)}
                     onDelete={()=>removeProject(p.id)}
                     totalWords={sum(sessions.filter(s=>s.projectId===p.id), s=>s.words)}
+                    onDraft={()=>setDraftProjectId(p.id)}
                   />
                 ))}
                 {projects.filter(p=>!p.archived).length===0 && (
@@ -517,7 +518,7 @@ function NewProjectDialog({ onCreate }){
   );
 }
 
-function ProjectCard({ p, onUpdate, onDelete, totalWords }){
+function ProjectCard({ p, onUpdate, onDelete, totalWords, onDraft }){
   const pct = p.targetWords ? Math.min(100, Math.round((totalWords/p.targetWords)*100)) : 0;
 
   return (
@@ -558,6 +559,7 @@ function ProjectCard({ p, onUpdate, onDelete, totalWords }){
         </div>
         <Progress value={pct} />
         <div className="flex items-center justify-end mt-3 gap-2">
+          <Button size="sm" variant="outline" onClick={onDraft}><NotebookPen className="w-3 h-3 mr-1"/>Draft</Button>
           <InlineEdit target={p.targetWords} label="Target" onChange={(val)=>onUpdate({targetWords: val})}/>
           <EditProjectDialog p={p} onUpdate={onUpdate} onDelete={onDelete} />
         </div>
@@ -630,15 +632,17 @@ function ProjectDraftDialog({ project, onSave, onClose }){
   function save() { onSave(text); onClose(); }
   return (
     <Dialog open={true} onOpenChange={(v)=>{ if(!v) onClose(); }}>
-      <DialogContent className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-xl">
-        <DialogHeader>
-          <DialogTitle>Draft: {project.title}</DialogTitle>
-        </DialogHeader>
-        <Textarea value={text} onChange={(e)=>setText(e.target.value)} className="min-h-[60vh]" />
-        <DialogFooter className="justify-between">
-          <Button variant="secondary" onClick={onClose}>Close</Button>
-          <Button onClick={save}>Save</Button>
-        </DialogFooter>
+     <DialogContent className="top-0 left-0 translate-x-0 translate-y-0 w-screen h-screen max-w-none rounded-none p-0 bg-white dark:bg-neutral-900">
+        <div className="flex flex-col h-full">
+          <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800">
+            <DialogTitle>Draft: {project.title}</DialogTitle>
+          </DialogHeader>
+          <Textarea value={text} onChange={(e)=>setText(e.target.value)} className="flex-1 resize-none p-4" />
+          <DialogFooter className="p-4 border-t border-neutral-200 dark:border-neutral-800 justify-between">
+            <Button variant="secondary" onClick={onClose}>Close</Button>
+            <Button onClick={save}>Save</Button>
+          </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
