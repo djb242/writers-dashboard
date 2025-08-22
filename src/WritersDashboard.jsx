@@ -136,7 +136,7 @@ export default function WritersDashboard({ userId }) {
 
   // Derived stats
   const today = new Date().toISOString().slice(0,10);
-  const todaysWords = useMemo(()=> sum(sessions.filter(s=>s.date===today), s=>s.words), [sessions]);
+  const todaysWords = useMemo(() => sum(sessions.filter(s => s.date === today), s => s.words), [sessions, today]);
   const streak = useMemo(()=>{
     let s=0; for(let i=0;i<365;i++){ const d = daysAgo(i).toISOString().slice(0,10); const w = sum(sessions.filter(x=>x.date===d), x=>x.words); if(w>0){ s++; } else break; }
     return s;
@@ -218,6 +218,20 @@ export default function WritersDashboard({ userId }) {
 
   const minutes = Math.floor(timerSeconds/60).toString().padStart(2,'0');
   const seconds = Math.floor(timerSeconds%60).toString().padStart(2,'0');
+
+  function handleDraftSave(text){
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    const minutesElapsed = Math.max(1, Math.round((startSecondsRef.current - timerSeconds)/60));
+    updateProject(draftProjectId, { draft: text });
+    logSession({ projectId: draftProjectId, date: today, minutes: minutesElapsed, words });
+    setTimerRunning(false);
+    setDraftProjectId("");
+  }
+
+  function handleDraftClose(){
+    setTimerRunning(false);
+    setDraftProjectId("");
+  }
 
   // ------------------------------
   // UI
@@ -336,8 +350,10 @@ export default function WritersDashboard({ userId }) {
               />
               <ProjectDraftDialog
                 project={projects.find(p=>p.id===draftProjectId)}
-                onSave={(text)=>updateProject(draftProjectId, { draft: text })}
-                onClose={()=>setDraftProjectId("")}
+                minutes={minutes}
+                seconds={seconds}
+                onSave={handleDraftSave}
+                onClose={handleDraftClose}
               />
             </CardContent>
           </Card>
