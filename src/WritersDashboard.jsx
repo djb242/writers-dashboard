@@ -632,7 +632,7 @@ function ProjectDraftDialog({ project, onSave, onClose }){
   function save() { onSave(text); onClose(); }
   return (
     <Dialog open={true} onOpenChange={(v)=>{ if(!v) onClose(); }}>
-     <DialogContent className="top-0 left-0 translate-x-0 translate-y-0 w-screen h-screen max-w-none rounded-none p-0 bg-white dark:bg-neutral-900">
+     <DialogContent className="top-0 left-0 translate-x-0 translate-y-0 w-screen h-screen max-w-none sm:max-w-none rounded-none p-0 bg-white dark:bg-neutral-900">
         <div className="flex flex-col h-full">
           <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800">
             <DialogTitle>Draft: {project.title}</DialogTitle>
