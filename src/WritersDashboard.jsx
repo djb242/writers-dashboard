@@ -22,7 +22,7 @@ import { supabase } from "./lib/supabase";
 // ------------------------------
 function uid() { return Math.random().toString(36).slice(2); }
 
-/** @typedef {{ id: string, title: string, description?: string, targetWords: number, deadline?: string, status: 'Drafting'|'Editing'|'Complete', createdAt: string, archived?: boolean, draft?: string }} Project */
+/** @typedef {{ id: string, title: string, description?: string, targetWords: number, deadline?: string, status: 'Drafting'|'Editing'|'Complete', createdAt: string, archived?: boolean, draft?: string, lastWordCount?: number, lastWordDate?: string }} Project */
 /** @typedef {{ id: string, projectId?: string, date: string, minutes: number, words: number, notes?: string }} Session */
 /** @typedef {{ id: string, text: string, tags: string[], projectId?: string, createdAt: string, pinned?: boolean }} Idea */
 
@@ -43,17 +43,6 @@ function fmtDate(d){ return new Date(d).toLocaleDateString(undefined,{ month:"sh
 function daysAgo(n){ const d=new Date(); d.setDate(d.getDate()-n); return d; }
 function clamp(n,min,max){ return Math.max(min, Math.min(max,n)); }
 function sum(arr,sel=(x)=>x){ return arr.reduce((a,b)=>a+sel(b),0); }
-
-// Generate simple prompts
-const PROMPTS = [
-  "Write a scene where a character receives unexpected help.",
-  "Describe a place using only sounds and smells.",
-  "Your protagonist has 10 minutes to decide: stay or go?",
-  "Write a dialogue with hidden subtext—two people want the opposite, but neither says it.",
-  "Recount a memory that changes meaning halfway through.",
-  "Open with the weather—but make it matter.",
-  "A letter is delivered to the wrong person.",
-];
 
 // ------------------------------
 // Main App
@@ -220,10 +209,15 @@ export default function WritersDashboard({ userId }) {
   const seconds = Math.floor(timerSeconds%60).toString().padStart(2,'0');
 
   function handleDraftSave(text){
-    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    const wordsTotal = text.trim() ? text.trim().split(/\s+/).length : 0;
+    const project = projects.find(p=>p.id===draftProjectId);
+    const prevWords = project?.lastWordCount || 0;
+    const addedWords = Math.max(0, wordsTotal - prevWords);
     const minutesElapsed = Math.max(1, Math.round((startSecondsRef.current - timerSeconds)/60));
-    updateProject(draftProjectId, { draft: text });
-    logSession({ projectId: draftProjectId, date: today, minutes: minutesElapsed, words });
+    updateProject(draftProjectId, { draft: text, lastWordCount: wordsTotal, lastWordDate: today });
+    if(addedWords>0 || minutesElapsed>0){
+      logSession({ projectId: draftProjectId, date: today, minutes: minutesElapsed, words: addedWords });
+    }
     setTimerRunning(false);
     setDraftProjectId("");
   }
@@ -352,6 +346,9 @@ export default function WritersDashboard({ userId }) {
                 project={projects.find(p=>p.id===draftProjectId)}
                 minutes={minutes}
                 seconds={seconds}
+                 timerRunning={timerRunning}
+                onPause={()=>setTimerRunning(false)}
+                onResume={()=>setTimerRunning(true)}
                 onSave={handleDraftSave}
                 onClose={handleDraftClose}
               />
@@ -625,22 +622,40 @@ function EditProjectDialog({ p, onUpdate, onDelete }){
   );
 }
 
-function ProjectDraftDialog({ project, onSave, onClose }){
+function ProjectDraftDialog({ project, minutes, seconds, timerRunning, onPause, onResume, onSave, onClose }){
   const [text, setText] = useState(project?.draft || "");
   useEffect(() => { setText(project?.draft || ""); }, [project]);
   if (!project) return null;
+  const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
   function save() { onSave(text); onClose(); }
   return (
     <Dialog open={true} onOpenChange={(v)=>{ if(!v) onClose(); }}>
-     <DialogContent className="top-0 left-0 translate-x-0 translate-y-0 w-screen h-screen max-w-none sm:max-w-none rounded-none p-0 bg-white dark:bg-neutral-900">
-        <div className="flex flex-col h-full">
-          <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800">
+      <DialogContent className="top-0 left-0 translate-x-0 translate-y-0 w-screen h-screen max-w-none sm:max-w-none rounded-none p-0 bg-white dark:bg-neutral-900">
+        <div className="flex flex-col h-full">  
+          <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
             <DialogTitle>Draft: {project.title}</DialogTitle>
-          </DialogHeader>
-          <Textarea value={text} onChange={(e)=>setText(e.target.value)} className="flex-1 resize-none p-4" />
+            <div className="flex items-center gap-2">
+              <div className="text-2xl font-mono tabular-nums">{minutes}:{seconds}</div>
+              {timerRunning ? (
+                <Button variant="secondary" onClick={onPause}><Pause className="w-4 h-4 mr-2"/>Pause</Button>
+              ) : (
+                <Button onClick={onResume}><Play className="w-4 h-4 mr-2"/>Resume</Button>
+              )}
+            </div>
+          </div>
+          <div className="flex-1 min-h-0">
+            <Textarea
+              value={text}
+              onChange={(e)=>setText(e.target.value)}
+              className="h-full w-full resize-none p-4"
+            />
+          </div>
           <DialogFooter className="p-4 border-t border-neutral-200 dark:border-neutral-800 justify-between">
-            <Button variant="secondary" onClick={onClose}>Close</Button>
-            <Button onClick={save}>Save</Button>
+            <div className="text-sm text-zinc-600">Words: {wordCount}</div>
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={onClose}>Close</Button>
+              <Button onClick={save}>Save</Button>
+            </div>
           </DialogFooter>
         </div>
       </DialogContent>
@@ -795,15 +810,60 @@ function IdeaList({ ideas, onUpdate, onDelete }){
 }
 
 function PromptBox(){
-  const [prompt,setPrompt] = useState("");
-  function roll(){ setPrompt(PROMPTS[Math.floor(Math.random()*PROMPTS.length)]); }
-  useEffect(()=>{ roll(); },[]);
+  const [prompt, setPrompt] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function roll(){
+    setLoading(true);
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-5",
+          messages: [
+            {
+              role: "system",
+              content: "You are an editor for *The Midbrow Culture Club*, a blog that covers film, TV, music, podcasts, books, games, and politics. The style is clear, curious, mid-length essays that stay grounded and avoid internet ephemera like memes, TikTok trends, or niche in-jokes."
+            },
+            {
+              role: "user",
+              content: "Return exactly one straightforward writing prompt for today.\n- Avoid suggesting specific titles. \n- Avoid memes or internet slang as topics. \n- Keep it short: 1–2 sentences.\n- No explanations, no preamble, just the prompt itself."
+            }
+          ],
+          temperature: 1,
+          max_completion_tokens: 1000,
+        }),
+      });
+
+      if (!res.ok) {
+      const errBody = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} ${res.statusText} — ${errBody}`);
+      }
+
+      const data = await res.json();
+      const content = data?.choices?.[0]?.message?.content?.trim() || "";
+      setPrompt(content || ""); // if empty, UI just shows blank
+    } catch (err) {
+      console.error("prompt error:", err);
+      setPrompt("Failed to load prompt.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { roll(); }, []);
   return (
     <div className="mb-4 p-3 rounded-2xl border bg-white shadow-xs">
       <div className="text-xs text-zinc-600 mb-1">Prompt</div>
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm flex-1">{prompt}</p>
-        <Button variant="outline" onClick={roll}><Wand2 className="w-4 h-4 mr-2"/>New</Button>
+        <Button variant="outline" onClick={roll} disabled={loading}>
+          <Wand2 className="w-4 h-4 mr-2"/>{loading ? "Loading" : "New"}
+        </Button>
       </div>
     </div>
   );
